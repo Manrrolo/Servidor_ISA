@@ -9,30 +9,32 @@ router.post('/login', async (ctx) => {
     const password1 = ctx.request.body.hash_contrasena;
     const admin = await ctx.orm.Admin.findOne({
       where: { email: ctx.request.body.email },
-      include: [{ model: ctx.orm.Match, attributes: ['id'] }],
+      include: [{ model: ctx.orm.File, attributes: ['id'] }],
     });
-    const player = await ctx.orm.Player.findOne({
+    const player = await ctx.orm.User.findOne({
       where: { email: ctx.request.body.email },
-      include: [{ model: ctx.orm.Match, attributes: ['id'] }],
+      include: [{ model: ctx.orm.File, attributes: ['id'] }],
     });
     if (player) {
       const password2 = await player.dataValues.hash_contrasena;
       if (!player || !(await bcrypt.compare(password1, password2))) {
         ctx.throw('Contraseña o mail incorrecto', 401);
       } else {
-        const sala = await ctx.orm.Sala.findAll({
+        const registro = await ctx.orm.Record.findAll({
           where: {
-            player1: player.id,
+            user: player.id,
           },
         });
         const payload = {
-          matches: player.Matches,
+          files: player.Files,
           nickname: player.nickname,
           id: player.id,
           admin: false,
-          salas: sala,
+          registros: registro,
         };
-        const tokenjwt = JWT.sign(payload, `${process.env.JWT_SECRET}`, { expiresIn: 3600 * 5 });
+        const tokenjwt = JWT.sign(payload, `${process.env.JWT_SECRET}`, {
+          expiresIn: 3600 * 5,
+        });
         ctx.request.header = { access_token: tokenjwt };
         const headers = ctx.request.header;
         ctx.body = headers;
@@ -44,11 +46,10 @@ router.post('/login', async (ctx) => {
       if (!admin || !(await bcrypt.compare(password1, password3))) {
         ctx.throw('Contraseña o mail incorrecto', 401);
       } else {
-        console.log(admin);
-        const players = await ctx.orm.Player.findAll();
+        const players = await ctx.orm.User.findAll();
         const payload = {
-          matches: admin.Matches,
-          player: players,
+          files: admin.Files,
+          user: players,
           nickname: 'Admin',
           admin: true,
         };
@@ -106,17 +107,20 @@ router.post('players.create', '/signup', async (ctx) => {
     evaluaciones.forEach((evaluacion) => {
       const cumpleEvaluacion = tests[evaluacion].test(bodyPassword);
       if (!cumpleEvaluacion) {
-        ctx.throw(`Tu contraseña debe tener ${mensajesPosibles[evaluacion]}`, 401);
+        ctx.throw(
+          `Tu contraseña debe tener ${mensajesPosibles[evaluacion]}`,
+          401,
+        );
       }
     });
     // Validar email
     if (!/^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z.]+$/.test(emails)) {
       ctx.throw('Debe ingresar un correo válido', 401);
     }
-    const playerverificacion = await ctx.orm.Player.findOne({
+    const playerverificacion = await ctx.orm.User.findOne({
       where: { nickname: username },
     });
-    const playerverificacion2 = await ctx.orm.Player.findOne({
+    const playerverificacion2 = await ctx.orm.User.findOne({
       where: { email: emails },
     });
     if (playerverificacion) {
@@ -126,14 +130,14 @@ router.post('players.create', '/signup', async (ctx) => {
       ctx.throw('Correo se encuentra ocupado', 401);
     }
     const hash = await bcrypt.hash(bodyPassword, 5);
-    const player = await ctx.orm.Player.create({
+    const player = await ctx.orm.User.create({
       nickname: username,
       email: emails,
       hash_contrasena: hash,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    console.log(player)
+    console.log(player);
     ctx.status = 201;
     ctx.body = {
       data: player.dataValues,
